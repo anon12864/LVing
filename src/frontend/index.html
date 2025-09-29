@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>LVing - Rust → CPG Converter</title>
+<style>
+ body{font-family:sans-serif;max-width:1920px;margin:auto;padding:2rem;margin-left:1rem}
+ .main-panels{display:flex;gap:2rem}
+ .panel{flex:1;min-width:0;display:flex;flex-direction:column}
+ .editor-container{
+   border:1px solid #ccc;
+   border-radius:4px;
+   overflow:hidden;
+   margin-bottom:1rem;
+ }
+ .cypher-container{margin-bottom:1rem;}
+ .graph-container{height:375px;background:#222;border-radius:6px;overflow:auto;}
+ button{margin-top:1rem;padding:.5rem 1rem}
+ pre{background:#eee;padding:1rem;white-space:pre-wrap}
+ #codePreview pre{font-family: 'Courier New', Consolas, monospace; line-height: 1.4;}
+ #useCodeBtn:hover{background: #218838;}
+ .styled-background { background-color: #ffd70047; }
+</style>
+</head>
+<body>
+<div class="main-panels">
+  <!-- Left Panel: Rust Code -->
+  <div class="panel">
+    <h2>Paste Rust code:</h2>
+    <form id="codeForm">
+      <!-- Code Examples Dropdown -->
+      <div style="margin-bottom: 1rem;">
+        <label for="codeExamples" style="color: #333; font-size: 14px; margin-bottom: 0.5rem; display: block;">📂 Code Examples:</label>
+        <select id="codeExamples" style="padding: 0.5rem; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; width: 100%; font-size: 13px;">
+          <option value="">Select an example...</option>
+          <option value="datarace">🧵 Data Race Example (SendablePtr)</option>
+          <option value="unsafecell">⚠️ UnsafeCell Example</option>
+          <option value="buffer_overflow">💥 Buffer Overflow Example (Merge Sort)</option>
+          <option value="cell_race">🔄 Cell Race Condition (RefOrInt)</option>
+          <option value="uninit_memory">🚫 Uninitialized Memory (AccReader)</option>
+        </select>
+      </div>
+      
+      <!-- Code Preview Component -->
+      <div id="codePreview" style="display: none; margin-bottom: 1rem; background: #222; border-radius: 6px; padding: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem;">
+          <div id="previewTitle" style="font-size: 14px; font-weight: bold; color: #ffc107;"></div>
+          <button type="button" id="useCodeBtn" style="padding: 0.4rem 0.8rem; background: #28a745; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+            Use This Code
+          </button>
+        </div>
+        <pre id="previewCode" style="background: #1a1a1a; color: #fff; padding: 1rem; border-radius: 4px; margin: 0; font-size: 12px; overflow-x: auto; border-left: 3px solid #ffc107;"></pre>
+      </div>
+      
+      <div class="editor-container">
+        <div id="codeEditor"></div>
+      </div>
+    </form>
+    <button id="codeFormButton" type="submit" form="codeForm">Convert &amp; Export to Neo4j</button>
+
+    <h3>Result</h3>
+    <pre id="result">—</pre>
+  </div>
+
+  <!-- Middle Panel: LLVM-IR Code -->
+  <div class="panel">
+    <h2>LLVM-IR Code</h2>
+    <div style="margin-bottom: 1rem;">
+      <!-- This is a hack just to make the codeviews horizontally align. -->
+      <label for="_" style="color: #ffffff; font-size: 14px; margin-bottom: 0.5rem; display: block;">_</label>
+      <select id="_" style="padding: 0.5rem; background: #fff; color: #fff; border: 1px solid #fff; border-radius: 4px; width: 100%; font-size: 13px; -moz-apperance:none; -webkit-appearance: none;" disabled>
+      </select>
+    </div>
+    <div class="editor-container">
+      <div id="llvmCodeEditor">
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Panel: Cypher Query & Graph -->
+  <div class="panel">
+    <h2>Neo4j Cypher Query & Graph</h2>
+    
+    <!-- Query Examples Dropdown -->
+    <div style="margin-bottom: 1rem;">
+      <label for="queryExamples" style="color: #333; font-size: 14px; margin-bottom: 0.5rem; display: block;">📝 Query Examples:</label>
+      <select id="queryExamples" style="padding: 0.5rem; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; width: 100%; font-size: 13px;">
+        <option value="all_edges">🔗 All Edge Types (DFG + EOG + AST + REFERS_TO + PDG + USAGE + SCOPE)</option>
+        <option value="dfg_only">📊 Data Flow Graph (DFG) Only</option>
+        <option value="eog_only">🔄 Execution Order Graph (EOG) Only</option>
+        <option value="ast_only">🌳 Abstract Syntax Tree (AST) Only</option>
+        <option value="refers_to">🔗 References (REFERS_TO) Only</option>
+        <option value="pdg_only">📈 Program Dependence Graph (PDG) Only</option>
+        <option value="usage_scope">🎯 Usage & Scope Relations</option>
+        <option value="full_context">🔍 Full Context (Multiple Union Queries)</option>
+      </select>
+    </div>
+    
+    <!-- Graph Filtering Controls -->
+    <div id="graphControls" style="display:none; background:#333; padding:1rem; border-radius:6px; margin-bottom:1rem; color:#fff;">
+      <!-- Help Text -->
+      <div style="font-size:12px; color:#aaa; margin-bottom:0.8rem; border-left:3px solid #666; padding-left:8px;">
+        💡 <strong>Tips:</strong> Search nodes, toggle filters, or <strong>right-click nodes</strong> to expand/remove them
+      </div>
+      
+      <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:center; margin-bottom:0.5rem;">
+        <!-- Search Bar -->
+        <div style="flex:1; min-width:200px;">
+          <input type="text" id="nodeSearch" placeholder="Search nodes..." 
+                 style="width:100%; padding:0.5rem; border:1px solid #555; background:#222; color:#fff; border-radius:4px;">
+        </div>
+        
+        <!-- Results Counter -->
+        <div id="filterResults" style="font-size:13px; color:#ccc; min-width:120px;">
+          Showing: 0/0 nodes
+        </div>
+        
+        <!-- Clear Button -->
+        <button id="clearFilters" style="padding:0.5rem 1rem; background:#666; color:#fff; border:none; border-radius:4px; cursor:pointer;">
+          Clear Filters
+        </button>
+      </div>
+      
+      <!-- Filter Toggles -->
+      <div style="display:flex; gap:1rem; flex-wrap:wrap; font-size:13px;">
+        <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
+          <input type="checkbox" id="filter-function" checked> Functions
+        </label>
+        <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
+          <input type="checkbox" id="filter-variable" checked> Variables
+        </label>
+        <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
+          <input type="checkbox" id="filter-operator" checked> Operators
+        </label>
+        <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
+          <input type="checkbox" id="filter-literal" checked> Literals
+        </label>
+        <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
+          <input type="checkbox" id="filter-unsafe" checked style="accent-color:#dc3545;"> Unsafe Operations
+        </label>
+        <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
+          <input type="checkbox" id="filter-other" checked> Other
+        </label>
+      </div>
+      
+      <!-- Edge Legend -->
+      <div style="margin-top:1rem; padding-top:1rem; border-top:1px solid #555;">
+        <div style="font-size:12px; color:#aaa; margin-bottom:0.5rem;">🎨 <strong>Edge Types Legend:</strong></div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:0.5rem; font-size:11px;">
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <div style="width:20px; height:2px; background:#28a745;"></div>
+            <span>DFG (Data Flow)</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <div style="width:20px; height:3px; background:#007acc;"></div>
+            <span>EOG (Execution)</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <div style="width:20px; height:1px; background:#6f42c1;"></div>
+            <span>AST (Syntax)</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <div style="width:20px; height:2px; background:#ffc107; background-image:repeating-linear-gradient(90deg, transparent, transparent 5px, rgba(0,0,0,0.3) 5px, rgba(0,0,0,0.3) 10px);"></div>
+            <span>REFERS_TO</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <div style="width:20px; height:2px; background:#e83e8c; background-image:repeating-linear-gradient(90deg, transparent, transparent 8px, rgba(0,0,0,0.3) 8px, rgba(0,0,0,0.3) 12px);"></div>
+            <span>PDG (Dependencies)</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <div style="width:20px; height:2px; background:#fd7e14; background-image:repeating-linear-gradient(90deg, transparent, transparent 3px, rgba(0,0,0,0.3) 3px, rgba(0,0,0,0.3) 6px);"></div>
+            <span>USAGE</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <div style="width:20px; height:1px; background:#20c997; background-image:repeating-linear-gradient(90deg, transparent, transparent 6px, rgba(0,0,0,0.3) 6px, rgba(0,0,0,0.3) 10px);"></div>
+            <span>SCOPE</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="graph-container" id="graphResult"></div>
+    <div class="cypher-container editor-container">
+      <div id="cypherEditor"></div>
+    </div>
+    <button id="runCypherBtn" type="button">Run Query</button>
+  </div>
+</div>
+
+<!-- CodeMirror 5 - Correct version with dependencies -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/mode/simple.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/rust/rust.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/cypher/cypher.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/monokai.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/selection/mark-selection.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/monokai.min.css">
+<!-- vis-network for graph visualization -->
+<script src="https://unpkg.com/vis-network@9.1.2/dist/vis-network.min.js"></script>
+<link href="https://unpkg.com/vis-network@9.1.2/dist/vis-network.min.css" rel="stylesheet" />
+
+<script src="app.js?v=202507230125"></script>
+</body>
+</html>
