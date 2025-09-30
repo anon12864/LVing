@@ -9,8 +9,8 @@ services:
       - NEO4J_server_default__advertised__address=${NEO4J_IP}
       # MEMORY CONFIGURATION - FIXES THE 716.8 MiB LIMIT ERROR
       - NEO4J_server_memory_heap_initial__size=2G
-      - NEO4J_server_memory_heap_max__size=4G
-      - NEO4J_server_memory_pagecache_size=2G
+      - NEO4J_server_memory_heap_max__size=3G
+      - NEO4J_server_memory_pagecache_size=1G
       - NEO4J_dbms_memory_transaction_total_max=2G
       # PERFORMANCE OPTIMIZATIONS FOR LARGE CPG IMPORTS
       - NEO4J_dbms_tx__log_rotation_retention__policy=1G size
